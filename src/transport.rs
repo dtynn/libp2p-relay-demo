@@ -14,6 +14,12 @@ fn is_holepunch_direct_addr(addr: &Multiaddr) -> bool {
     addr.iter().any(|p| p == Protocol::P2pWebRtcDirect)
 }
 
+fn direct_addr_2_normal(addr: Multiaddr) -> Multiaddr {
+    addr.into_iter()
+        .filter(|p| !matches!(p, Protocol::P2pWebRtcDirect))
+        .collect()
+}
+
 pub struct HolePunchTransport {
     inner: TokioTcpTransport,
 }
@@ -39,7 +45,7 @@ impl Transport for HolePunchTransport {
     ) -> Result<(), TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
             info!(?id, ?addr, "listen on");
-            self.inner.listen_on(id, addr)
+            self.inner.listen_on(id, direct_addr_2_normal(addr))
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
@@ -52,7 +58,7 @@ impl Transport for HolePunchTransport {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
             info!(?addr, "dial");
-            self.inner.dial(addr)
+            self.inner.dial(direct_addr_2_normal(addr))
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
@@ -64,7 +70,7 @@ impl Transport for HolePunchTransport {
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
             info!(?addr, "dial as listener");
-            self.inner.dial_as_listener(addr)
+            self.inner.dial_as_listener(direct_addr_2_normal(addr))
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
@@ -80,7 +86,8 @@ impl Transport for HolePunchTransport {
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if is_holepunch_direct_addr(listen) {
             info!(?listen, ?observed, "address translation");
-            self.inner.address_translation(listen, observed)
+            self.inner
+                .address_translation(&direct_addr_2_normal(listen.clone()), observed)
         } else {
             None
         }
