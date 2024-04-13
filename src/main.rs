@@ -7,7 +7,7 @@ use futures::{StreamExt, executor::block_on, FutureExt};
 use libp2p::{
     autonat, dcutr, identify, identity::Keypair, multiaddr::Protocol, noise, ping, relay, tcp,
     tcp::tokio::Transport as TokioTcpTransport, yamux, Multiaddr, SwarmBuilder, Transport,
-    swarm::{SwarmEvent, ConnectionId}, PeerId, core::ConnectedPoint,
+    swarm::{SwarmEvent, ConnectionId}, PeerId, core::{ConnectedPoint, Endpoint},
 };
 use tracing::{warn, info, warn_span};
 use tracing_subscriber::EnvFilter;
@@ -96,7 +96,10 @@ async fn main() {
                 .dcutr_port
                 .map(|_| dcutr::Behaviour::new(key.public().to_peer_id()))
                 .into(),
-            autonat: autonat::Behaviour::new(key.public().to_peer_id(), Default::default()),
+                autonat: autonat::Behaviour::new(key.public().to_peer_id(), autonat::Config {
+                    confidence_max: 1,
+                    .. Default::default()
+                }),
             ping: ping::Behaviour::default(),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/RelayDemo/0.0.1".to_string(),
@@ -167,10 +170,16 @@ async fn main() {
                             }
 
                             if is_relay_server && opt.listen_relayed {
-                                let listen_addr = Multiaddr::empty().with(Protocol::P2p(peer_id)).with(Protocol::P2pCircuit);
-                                match swarm.listen_on(listen_addr) {
-                                    Ok(_) => info!("listen relayed"),
-                                    Err(e) => warn!(err=?e, "listen relayed"),
+                                if let Some(addr) = connections.get(&peer_id).and_then(|c| c.values().find_map(|point| match point {
+                                    ConnectedPoint::Dialer { address, role_override: Endpoint::Dialer } => Some(address.clone()),
+                                    _ => None
+                                })) {
+                                    let listen_addr = addr.with(Protocol::P2pCircuit);
+                                    let _inner_span = warn_span!("relayed", ?listen_addr).entered();
+                                    match swarm.listen_on(listen_addr) {
+                                        Ok(_) => info!("listened"),
+                                        Err(e) => warn!(err=?e, "failed"),
+                                    }
                                 }
                             }
                         },
