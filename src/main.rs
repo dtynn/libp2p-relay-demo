@@ -164,6 +164,7 @@ async fn main() {
                     match evt {
                         identify::Event::Received { peer_id, info } => {
                             let _span = warn_span!("identify", ?peer_id).entered();
+                            info!(?info, "received");
                             let is_relay_server = info.protocols.contains(&relay::HOP_PROTOCOL_NAME);
                             if is_relay_server {
                                 info!("relay candidate");
@@ -204,10 +205,12 @@ async fn main() {
                 }
 
                 SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, .. } => {
+                    info!(?peer_id, ?connection_id, ?endpoint, "connection established");
                     connections.entry(peer_id).or_default().insert(connection_id, endpoint);
                 }
 
                 SwarmEvent::ConnectionClosed { peer_id, connection_id, .. } => {
+                    info!(?peer_id, ?connection_id, "connection closed");
                     let entry = connections.entry(peer_id);
                     let mut is_empty = false;
                     entry.and_modify(|c| { c.remove(&connection_id); is_empty = c.is_empty(); });
