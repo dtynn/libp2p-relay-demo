@@ -1,10 +1,14 @@
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use tracing::info;
 
 use libp2p::{
-    core::transport::{ListenerId, TransportEvent},
+    core::{
+        address_translation,
+        transport::{ListenerId, TransportEvent},
+    },
     multiaddr::Protocol,
     tcp::{tokio::Transport as TokioTcpTransport, Config},
     Multiaddr, Transport, TransportError,
@@ -21,12 +25,14 @@ fn direct_addr_2_normal(addr: Multiaddr) -> Multiaddr {
 }
 
 pub struct HolePunchTransport {
+    listened: HashMap<ListenerId, Multiaddr>,
     inner: TokioTcpTransport,
 }
 
 impl HolePunchTransport {
     pub fn new(cfg: Config) -> Self {
         HolePunchTransport {
+            listened: Default::default(),
             inner: TokioTcpTransport::new(cfg.port_reuse(true)),
         }
     }
@@ -45,13 +51,17 @@ impl Transport for HolePunchTransport {
     ) -> Result<(), TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
             info!(?id, ?addr, "listen on");
-            self.inner.listen_on(id, direct_addr_2_normal(addr))
+            let normal = direct_addr_2_normal(addr);
+            self.inner.listen_on(id, normal.clone()).inspect(|_| {
+                self.listened.insert(id, normal);
+            })
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.listened.remove(&id);
         self.inner.remove_listener(id)
     }
 
@@ -84,12 +94,17 @@ impl Transport for HolePunchTransport {
     }
 
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if is_holepunch_direct_addr(listen) {
-            info!(?listen, ?observed, "address translation");
-            self.inner
-                .address_translation(&direct_addr_2_normal(listen.clone()), observed)
-        } else {
-            None
-        }
+        let port = listen.iter().skip(1).next();
+
+        self.listened
+            .values()
+            .any(|addr| {
+                let addr_port = addr.iter().skip(1).next();
+                addr_port.is_some() && addr_port == port
+            })
+            .then(|| address_translation(listen, observed))
+            .flatten()
+            .map(|addr| addr.with(Protocol::P2pWebRtcDirect))
+            .inspect(|addr| info!(?addr, "translated"))
     }
 }

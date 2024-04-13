@@ -96,10 +96,10 @@ async fn main() {
                 .dcutr_port
                 .map(|_| dcutr::Behaviour::new(key.public().to_peer_id()))
                 .into(),
-                autonat: autonat::Behaviour::new(key.public().to_peer_id(), autonat::Config {
-                    confidence_max: 1,
-                    .. Default::default()
-                }),
+            autonat: autonat::Behaviour::new(key.public().to_peer_id(), autonat::Config {
+                confidence_max: 1,
+                .. Default::default()
+            }),
             ping: ping::Behaviour::default(),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/RelayDemo/0.0.1".to_string(),
@@ -165,6 +165,7 @@ async fn main() {
                         identify::Event::Received { peer_id, info } => {
                             let _span = warn_span!("identify", ?peer_id).entered();
                             info!(?info, "received");
+
                             let is_relay_server = info.protocols.contains(&relay::HOP_PROTOCOL_NAME);
                             if is_relay_server {
                                 info!("relay candidate");
@@ -202,6 +203,10 @@ async fn main() {
 
                 SwarmEvent::Behaviour(BehaviourEvent::Autonat(evt)) => {
                     info!(?evt, "autonat");
+                }
+
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(evt)) => {
+                    info!(?evt, "DCUTR");
                 }
 
                 SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, .. } => {
