@@ -182,6 +182,17 @@ async fn main() {
                                     }
                                 }
                             }
+
+                            if let Some(peer_addr) = opt.peer.as_ref() {
+                                let _peer_span = warn_span!("peer", ?peer_addr);
+                                let pre_connected = opt.connect.iter().any(|addr| addr.iter().any(|p| p == Protocol::P2p(peer_id)));
+                                if pre_connected {
+                                    match swarm.dial(peer_addr.clone()) {
+                                        Ok(_) => info!("dialed"),
+                                        Err(e) => warn!(err=?e, "dial failure"),
+                                    };
+                                }
+                            }
                         },
 
                         _other => {},

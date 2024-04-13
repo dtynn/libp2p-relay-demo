@@ -1,6 +1,8 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use tracing::info;
+
 use libp2p::{
     core::transport::{ListenerId, TransportEvent},
     multiaddr::Protocol,
@@ -36,6 +38,7 @@ impl Transport for HolePunchTransport {
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
+            info!(?id, ?addr, "listen on");
             self.inner.listen_on(id, addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
@@ -48,6 +51,7 @@ impl Transport for HolePunchTransport {
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
+            info!(?addr, "dial");
             self.inner.dial(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
@@ -59,6 +63,7 @@ impl Transport for HolePunchTransport {
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if is_holepunch_direct_addr(&addr) {
+            info!(?addr, "dial as listener");
             self.inner.dial_as_listener(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
@@ -74,6 +79,7 @@ impl Transport for HolePunchTransport {
 
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if is_holepunch_direct_addr(listen) {
+            info!(?listen, ?observed, "address translation");
             self.inner.address_translation(listen, observed)
         } else {
             None
