@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, collections::HashSet};
 use std::any::type_name_of_val;
 use std::collections::HashMap;
 
@@ -9,7 +9,7 @@ use libp2p::{
     tcp::tokio::Transport as TokioTcpTransport, yamux, Multiaddr, SwarmBuilder, Transport,
     swarm::{SwarmEvent, ConnectionId}, PeerId, core::{ConnectedPoint, Endpoint}, kad::{self, store::MemoryStore},
 };
-use tracing::{warn, info, warn_span};
+use tracing::{warn, info, warn_span, debug};
 use tracing_subscriber::EnvFilter;
 
 mod behaviour;
@@ -46,6 +46,12 @@ struct Opt {
 
     #[clap(long, default_value_t = false)]
     kad: bool,
+
+    #[clap(long)]
+    kad_put: Option<String>,
+
+    #[clap(long)]
+    kad_get: Option<String>,
 }
 
 fn generate_ed25519(secret_key_seed: u8) -> Keypair {
@@ -162,6 +168,7 @@ async fn main() {
         info!("Swarm Loop");
 
         let mut connections: HashMap<PeerId, HashMap<ConnectionId, ConnectedPoint>>  = HashMap::new();
+        let mut relayed_connections: HashMap<PeerId, HashSet<ConnectionId>> = HashMap::new();
 
         loop {
             match swarm.next().await.expect("swarm stream") {
@@ -212,15 +219,60 @@ async fn main() {
 
                 SwarmEvent::Behaviour(BehaviourEvent::Dcutr(evt)) => {
                     info!(?evt, "DCUTR");
+                    if let Some(conns) = relayed_connections.remove(&evt.remote_peer_id) {
+                        for conn in conns {
+                            let closed = swarm.close_connection(conn);
+                            info!(?conn, ?closed, "close relayed connection");
+                        }
+                    }
+                }
+
+                SwarmEvent::Behaviour(BehaviourEvent::Kad(evt)) => {
+                    info!(?evt, "kademlia");
+                    if let kad::Event::RoutingUpdated { peer, .. } = evt {
+                        let _kad_span = warn_span!("kad", ?peer);
+                        if let Some(put) = opt.kad_put.as_ref() {
+                            let mut splitted = put.splitn(2, ':');
+                            let k = splitted.next().unwrap_or("").trim();
+                            let v = splitted.next().unwrap_or("").trim();
+
+                            if !k.is_empty() && !v.is_empty() {
+                                let _put_span = warn_span!("put", k, v).entered();
+                                if let Some(kad) = swarm.behaviour_mut().kad.as_mut() {
+                                    let query_id =  kad.inner_mut().put_record_to(kad::Record{key: kad::RecordKey::new(&k), value: v.as_bytes().to_vec(), publisher: None, expires: None}, [peer].into_iter(), kad::Quorum::One);
+                                    info!(?query_id, "query");
+                                }
+                            }
+                        }
+
+                        if let Some(key) = opt.kad_get.as_ref() {
+                            let k = key.trim();
+                            if !k.is_empty() {
+                                let _get_span = warn_span!("kad get", k).entered();
+                                if let Some(kad) = swarm.behaviour_mut().kad.as_mut() {
+                                    let query_id =  kad.inner_mut().get_record(kad::RecordKey::new(&k));
+                                    info!(?query_id, "get record");
+                                }
+                            }
+                        }
+                    }
                 }
 
                 SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, .. } => {
                     info!(?peer_id, ?connection_id, ?endpoint, "connection established");
+                    if endpoint.is_relayed() {
+                        relayed_connections.entry(peer_id).or_default().insert(connection_id);
+                    }
+
                     connections.entry(peer_id).or_default().insert(connection_id, endpoint);
                 }
 
-                SwarmEvent::ConnectionClosed { peer_id, connection_id, .. } => {
+                SwarmEvent::ConnectionClosed { peer_id, connection_id, endpoint, .. } => {
                     info!(?peer_id, ?connection_id, "connection closed");
+                    if endpoint.is_relayed() {
+                        relayed_connections.entry(peer_id).and_modify(|set| { set.remove(&connection_id); });
+                    }
+
                     let entry = connections.entry(peer_id);
                     let mut is_empty = false;
                     entry.and_modify(|c| { c.remove(&connection_id); is_empty = c.is_empty(); });
@@ -230,7 +282,7 @@ async fn main() {
                 }
 
                 event => {
-                    info!(?event, "OTHER EVENT<{}>", type_name_of_val(&event));
+                    debug!(?event, "OTHER EVENT<{}>", type_name_of_val(&event));
                 }
             }
         }

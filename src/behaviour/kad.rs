@@ -20,6 +20,12 @@ pub struct Behaviour {
     inner: kad::Behaviour<MemoryStore>,
 }
 
+impl Behaviour {
+    pub fn inner_mut(&mut self) -> &mut kad::Behaviour<MemoryStore> {
+        &mut self.inner
+    }
+}
+
 impl From<kad::Behaviour<MemoryStore>> for Behaviour {
     fn from(value: kad::Behaviour<MemoryStore>) -> Self {
         Behaviour { inner: value }
