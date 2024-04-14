@@ -1,8 +1,9 @@
 use libp2p::{
-    autonat, identify, ping, relay,
+    identify, ping, relay,
     swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
 };
 
+mod autonat;
 mod direct_client;
 mod kad;
 

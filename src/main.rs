@@ -110,7 +110,7 @@ async fn main() {
             autonat: autonat::Behaviour::new(key.public().to_peer_id(), autonat::Config {
                 confidence_max: 1,
                 .. Default::default()
-            }),
+            }).into(),
             ping: ping::Behaviour::default(),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/RelayDemo/0.0.1".to_string(),
