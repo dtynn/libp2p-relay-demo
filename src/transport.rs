@@ -14,7 +14,7 @@ use libp2p::{
     Multiaddr, Transport, TransportError,
 };
 
-fn is_holepunch_direct_addr(addr: &Multiaddr) -> bool {
+pub fn is_holepunch_direct_addr(addr: &Multiaddr) -> bool {
     addr.iter().any(|p| p == Protocol::P2pWebRtcDirect)
 }
 

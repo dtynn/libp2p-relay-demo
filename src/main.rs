@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 mod behaviour;
 mod transport;
 
+pub(crate) use transport::is_holepunch_direct_addr;
 use behaviour::{Behaviour, BehaviourEvent};
 
 #[derive(Debug, Parser)]
@@ -94,7 +95,7 @@ async fn main() {
             relay_client,
             dcutr: opt
                 .dcutr_port
-                .map(|_| dcutr::Behaviour::new(key.public().to_peer_id()))
+                .map(|_| dcutr::Behaviour::new(key.public().to_peer_id()).into())
                 .into(),
             autonat: autonat::Behaviour::new(key.public().to_peer_id(), autonat::Config {
                 confidence_max: 1,
@@ -186,7 +187,7 @@ async fn main() {
                             }
 
                             if let Some(peer_addr) = opt.peer.as_ref() {
-                                let _peer_span = warn_span!("peer", ?peer_addr);
+                                let _peer_span = warn_span!("peer", ?peer_addr).entered();
                                 let pre_connected = opt.connect.iter().any(|addr| addr.iter().any(|p| p == Protocol::P2p(peer_id)));
                                 if pre_connected {
                                     match swarm.dial(peer_addr.clone()) {
