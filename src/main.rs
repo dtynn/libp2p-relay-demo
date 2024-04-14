@@ -7,7 +7,7 @@ use futures::{StreamExt, executor::block_on, FutureExt};
 use libp2p::{
     autonat, dcutr, identify, identity::Keypair, multiaddr::Protocol, noise, ping, relay, tcp,
     tcp::tokio::Transport as TokioTcpTransport, yamux, Multiaddr, SwarmBuilder, Transport,
-    swarm::{SwarmEvent, ConnectionId}, PeerId, core::{ConnectedPoint, Endpoint},
+    swarm::{SwarmEvent, ConnectionId}, PeerId, core::{ConnectedPoint, Endpoint}, kad::{self, store::MemoryStore},
 };
 use tracing::{warn, info, warn_span};
 use tracing_subscriber::EnvFilter;
@@ -43,6 +43,9 @@ struct Opt {
 
     #[clap(long)]
     dcutr_port: Option<u16>,
+
+    #[clap(long, default_value_t = false)]
+    kad: bool,
 }
 
 fn generate_ed25519(secret_key_seed: u8) -> Keypair {
@@ -88,6 +91,7 @@ async fn main() {
         .with_relay_client(noise::Config::new, yamux::Config::default)
         .expect("swarm with relay client")
         .with_behaviour(|key, relay_client| Behaviour {
+            kad: opt.kad.then(|| kad::Behaviour::new(key.public().to_peer_id(), MemoryStore::new(key.public().to_peer_id())).into()).into(),
             relay: opt
                 .relay_service
                 .then(|| relay::Behaviour::new(key.public().to_peer_id(), Default::default()))

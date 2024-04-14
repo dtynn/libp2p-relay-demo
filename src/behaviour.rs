@@ -4,9 +4,11 @@ use libp2p::{
 };
 
 mod direct_client;
+mod kad;
 
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
+    pub kad: Toggle<kad::Behaviour>,
     pub relay: Toggle<relay::Behaviour>,
     pub relay_client: relay::client::Behaviour,
     pub dcutr: Toggle<direct_client::Behaviour>,
